@@ -97,22 +97,25 @@ router.post('/login', loginLimiter, [
     }
 
     const { username, password } = req.body;
-    const db = database.getDB();
+    const supabase = database.getDB();
 
-    // Query user by username only
-    const [result] = await db.query('SELECT * FROM users WHERE username = $username', { username });
-    const user = result.result[0];
+    // Query user by username
+    const { data: user, error: queryError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .single();
 
     // Constant-time response to prevent username enumeration
-    if (!user) {
+    if (queryError || !user) {
       // Simulate password hashing time even for non-existent users
       await bcrypt.hash('dummy', parseInt(process.env.BCRYPT_ROUNDS));
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
     // Check account lockout
-    if (user.lockoutUntil && new Date() < new Date(user.lockoutUntil)) {
-      const lockoutRemaining = Math.ceil((new Date(user.lockoutUntil) - new Date()) / 1000 / 60);
+    if (user.lockout_until && new Date() < new Date(user.lockout_until)) {
+      const lockoutRemaining = Math.ceil((new Date(user.lockout_until) - new Date()) / 1000 / 60);
       return res.status(423).json({ 
         error: 'Account temporarily locked', 
         lockoutMinutes: lockoutRemaining 
@@ -124,21 +127,23 @@ router.post('/login', loginLimiter, [
     
     if (!isValidPassword) {
       // Increment failed attempts
-      const attempts = (user.loginAttempts || 0) + 1;
+      const attempts = (user.login_attempts || 0) + 1;
       const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS);
       const lockoutTime = parseInt(process.env.LOCKOUT_TIME);
       
       let lockoutUntil = null;
       if (attempts >= maxAttempts) {
-        lockoutUntil = new Date(Date.now() + lockoutTime * 60 * 1000);
+        lockoutUntil = new Date(Date.now() + lockoutTime * 60 * 1000).toISOString();
       }
 
-      await db.query(`
-        UPDATE $userId SET 
-          loginAttempts = $attempts, 
-          lockoutUntil = $lockoutUntil,
-          lastFailedLogin = time::now()
-      `, { userId: user.id, attempts, lockoutUntil });
+      await supabase
+        .from('users')
+        .update({
+          login_attempts: attempts,
+          lockout_until: lockoutUntil,
+          last_failed_login: new Date().toISOString()
+        })
+        .eq('id', user.id);
 
       // Log security event
       console.warn(`Failed login attempt for user: ${username}, attempts: ${attempts}, IP: ${req.ip}`);
@@ -147,19 +152,25 @@ router.post('/login', loginLimiter, [
     }
 
     // Successful login - reset attempts and generate tokens
-    await db.query(`
-      UPDATE $userId SET 
-        loginAttempts = 0, 
-        lockoutUntil = NONE,
-        lastLogin = time::now()
-    `, { userId: user.id });
+    await supabase
+      .from('users')
+      .update({
+        login_attempts: 0,
+        lockout_until: null,
+        last_login: new Date().toISOString()
+      })
+      .eq('id', user.id);
 
     const { accessToken, refreshToken } = generateTokens(user.id);
 
-    // Store refresh token securely
-    await db.query(`
-      UPDATE $userId SET refreshTokens = array::append(refreshTokens, $refreshToken)
-    `, { userId: user.id, refreshToken });
+    // Store refresh token in separate table
+    await supabase
+      .from('refresh_tokens')
+      .insert({
+        user_id: user.id,
+        token: refreshToken,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      });
 
     // Log successful login
     console.log(`Successful login for user: ${username}, IP: ${req.ip}`);

@@ -20,17 +20,27 @@ Secure authentication backend for ScoutNetworking platform.
 npm install
 ```
 
-2. Start SurrealDB:
-```bash
-surreal start --log trace --user root --pass root memory
-```
+2. Set up Supabase:
+   - Create a new project at [supabase.com](https://supabase.com)
+   - Run the SQL script in `supabase-setup.sql` in your Supabase SQL Editor
+   - Get your project URL and anon key from Settings > API
 
-3. Copy environment file:
+3. Configure environment:
 ```bash
 copy .env.example .env
 ```
+Update `.env` with your Supabase credentials:
+```
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+```
 
-4. Start development server:
+4. Create test user:
+   - Hash the password `sifrasifra` using bcrypt (12 rounds)
+   - Update the INSERT statement in `supabase-setup.sql` with the actual hash
+   - Run the SQL script
+
+5. Start development server:
 ```bash
 npm run dev
 ```

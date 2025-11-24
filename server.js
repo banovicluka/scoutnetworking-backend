@@ -4,7 +4,9 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const database = require('./config/database');
 const authRoutes = require('./routes/auth');
+const reportsRoutes = require('./routes/reports');
 const { generalLimiter, securityHeaders } = require('./middleware/security');
+const { swaggerUi, specs } = require('./swagger');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,13 +30,37 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// Health check
+// API Documentation
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(specs));
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Health check endpoint
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Server is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: OK
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

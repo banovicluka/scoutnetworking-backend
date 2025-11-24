@@ -73,6 +73,102 @@ router.post('/register', [
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Authenticate user with username and password
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 minLength: 3
+ *                 maxLength: 50
+ *                 pattern: '^[a-zA-Z0-9._-]+$'
+ *                 example: fkzeljeznicar
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *                 example: sifrasifra
+ *     responses:
+ *       200:
+ *         description: Authentication successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Authentication successful
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     username:
+ *                       type: string
+ *                       example: fkzeljeznicar
+ *                     role:
+ *                       type: string
+ *                       example: client
+ *                 accessToken:
+ *                   type: string
+ *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 refreshToken:
+ *                   type: string
+ *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 expiresIn:
+ *                   type: string
+ *                   example: 15m
+ *       400:
+ *         description: Invalid input
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Invalid input
+ *                 details:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Invalid username or password
+ *       429:
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Too many login attempts
+ */
 // Login - Production-ready authentication endpoint
 router.post('/login', loginLimiter, [
   body('username')
@@ -113,64 +209,16 @@ router.post('/login', loginLimiter, [
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Check account lockout
-    if (user.lockout_until && new Date() < new Date(user.lockout_until)) {
-      const lockoutRemaining = Math.ceil((new Date(user.lockout_until) - new Date()) / 1000 / 60);
-      return res.status(423).json({ 
-        error: 'Account temporarily locked', 
-        lockoutMinutes: lockoutRemaining 
-      });
-    }
-
     // Verify password with constant-time comparison
     const isValidPassword = await bcrypt.compare(password, user.password);
     
     if (!isValidPassword) {
-      // Increment failed attempts
-      const attempts = (user.login_attempts || 0) + 1;
-      const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS);
-      const lockoutTime = parseInt(process.env.LOCKOUT_TIME);
-      
-      let lockoutUntil = null;
-      if (attempts >= maxAttempts) {
-        lockoutUntil = new Date(Date.now() + lockoutTime * 60 * 1000).toISOString();
-      }
-
-      await supabase
-        .from('users')
-        .update({
-          login_attempts: attempts,
-          lockout_until: lockoutUntil,
-          last_failed_login: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
       // Log security event
-      console.warn(`Failed login attempt for user: ${username}, attempts: ${attempts}, IP: ${req.ip}`);
-      
+      console.warn(`Failed login attempt for user: ${username}, IP: ${req.ip}`);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Successful login - reset attempts and generate tokens
-    await supabase
-      .from('users')
-      .update({
-        login_attempts: 0,
-        lockout_until: null,
-        last_login: new Date().toISOString()
-      })
-      .eq('id', user.id);
-
     const { accessToken, refreshToken } = generateTokens(user.id);
-
-    // Store refresh token in separate table
-    await supabase
-      .from('refresh_tokens')
-      .insert({
-        user_id: user.id,
-        token: refreshToken,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-      });
 
     // Log successful login
     console.log(`Successful login for user: ${username}, IP: ${req.ip}`);

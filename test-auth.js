@@ -11,7 +11,7 @@ async function testAuthentication() {
     // Test 1: Valid credentials
     console.log('1. Testing valid credentials...');
     const validResponse = await axios.post(`${BASE_URL}/api/auth/login`, {
-      username: 'luka.ban',
+      username: 'fkzeljeznicar',
       password: 'sifrasifra'
     });
     
@@ -41,7 +41,7 @@ async function testAuthentication() {
     console.log('3. Testing invalid password...');
     try {
       await axios.post(`${BASE_URL}/api/auth/login`, {
-        username: 'luka.ban',
+        username: 'fkzeljeznicar',
         password: 'wrongpassword'
       });
     } catch (error) {

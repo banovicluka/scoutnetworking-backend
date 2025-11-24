@@ -11,15 +11,28 @@ const verifyToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    const db = database.getDB();
     
-    const [user] = await db.select(`users:${decoded.userId}`);
-    if (!user) {
+    // Get user with scout information if applicable
+    const { data: user, error } = await database.getDB()
+      .from('users')
+      .select(`
+        *,
+        scout:scouts(id, scout_role)
+      `)
+      .eq('id', decoded.userId)
+      .single();
+
+    if (error || !user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    if (user.lockoutUntil && new Date() < new Date(user.lockoutUntil)) {
+    if (user.lockout_until && new Date() < new Date(user.lockout_until)) {
       return res.status(423).json({ error: 'Account temporarily locked' });
+    }
+
+    // Add scout ID to user object for easy access
+    if (user.scout) {
+      user.scoutId = user.scout.id;
     }
 
     req.user = user;
@@ -46,4 +59,8 @@ const requireRole = (roles) => {
   };
 };
 
-module.exports = { verifyToken, requireRole };
+module.exports = { 
+  authenticateToken: verifyToken, 
+  verifyToken, 
+  requireRole 
+};

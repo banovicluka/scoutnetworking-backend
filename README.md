@@ -38,8 +38,7 @@ npm run dev
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login user
+- `POST /api/auth/login` - Login with username/password
 - `POST /api/auth/refresh` - Refresh access token
 - `POST /api/auth/logout` - Logout user
 - `GET /api/auth/me` - Get current user
@@ -47,13 +46,34 @@ npm run dev
 ### Health Check
 - `GET /health` - Server health status
 
-## Password Requirements
+## Test Authentication
 
+```bash
+# Test the login endpoint
+curl -X POST "http://localhost:5000/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "luka.ban", "password": "sifrasifra"}'
+
+# Or run the test script
+npm run test:auth
+```
+
+## Authentication Requirements
+
+### Username
+- 3-50 characters
+- Letters, numbers, dots, underscores, or hyphens only
+
+### Password
 - Minimum 8 characters
 - At least one uppercase letter
 - At least one lowercase letter
 - At least one number
 - At least one special character (@$!%*?&)
+
+### Test Credentials
+- Username: `luka.ban`
+- Password: `sifrasifra`
 
 ## Environment Variables
 

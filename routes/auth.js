@@ -73,69 +73,122 @@ router.post('/register', [
   }
 });
 
-// Login
+// Login - Production-ready authentication endpoint
 router.post('/login', loginLimiter, [
-  body('email').notEmpty(),
-  body('password').notEmpty()
+  body('username')
+    .trim()
+    .isLength({ min: 3, max: 50 })
+    .matches(/^[a-zA-Z0-9._-]+$/)
+    .withMessage('Username must be 3-50 characters and contain only letters, numbers, dots, underscores, or hyphens'),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters')
 ], async (req, res) => {
+  const startTime = Date.now();
+  
   try {
+    // Input validation
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ 
+        error: 'Invalid input', 
+        details: errors.array().map(err => err.msg)
+      });
     }
 
-    const { email, password } = req.body;
+    const { username, password } = req.body;
     const db = database.getDB();
 
-    const [result] = await db.query('SELECT * FROM users WHERE email = $email OR username = $email', { email });
+    // Query user by username only
+    const [result] = await db.query('SELECT * FROM users WHERE username = $username', { username });
     const user = result.result[0];
 
+    // Constant-time response to prevent username enumeration
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      // Simulate password hashing time even for non-existent users
+      await bcrypt.hash('dummy', parseInt(process.env.BCRYPT_ROUNDS));
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Check if account is locked
+    // Check account lockout
     if (user.lockoutUntil && new Date() < new Date(user.lockoutUntil)) {
-      return res.status(423).json({ error: 'Account temporarily locked' });
+      const lockoutRemaining = Math.ceil((new Date(user.lockoutUntil) - new Date()) / 1000 / 60);
+      return res.status(423).json({ 
+        error: 'Account temporarily locked', 
+        lockoutMinutes: lockoutRemaining 
+      });
     }
 
-    // Verify password (support both bcrypt and plain text for existing users)
-    const isValidPassword = await bcrypt.compare(password, user.password) || password === user.password;
+    // Verify password with constant-time comparison
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    
     if (!isValidPassword) {
-      // Increment login attempts
+      // Increment failed attempts
       const attempts = (user.loginAttempts || 0) + 1;
-      const lockoutUntil = attempts >= parseInt(process.env.MAX_LOGIN_ATTEMPTS) 
-        ? new Date(Date.now() + parseInt(process.env.LOCKOUT_TIME) * 60 * 1000)
-        : null;
+      const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS);
+      const lockoutTime = parseInt(process.env.LOCKOUT_TIME);
+      
+      let lockoutUntil = null;
+      if (attempts >= maxAttempts) {
+        lockoutUntil = new Date(Date.now() + lockoutTime * 60 * 1000);
+      }
 
       await db.query(`
-        UPDATE $userId SET loginAttempts = $attempts, lockoutUntil = $lockoutUntil
+        UPDATE $userId SET 
+          loginAttempts = $attempts, 
+          lockoutUntil = $lockoutUntil,
+          lastFailedLogin = time::now()
       `, { userId: user.id, attempts, lockoutUntil });
 
-      return res.status(401).json({ error: 'Invalid credentials' });
+      // Log security event
+      console.warn(`Failed login attempt for user: ${username}, attempts: ${attempts}, IP: ${req.ip}`);
+      
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Reset login attempts on successful login
+    // Successful login - reset attempts and generate tokens
     await db.query(`
-      UPDATE $userId SET loginAttempts = 0, lockoutUntil = NONE
+      UPDATE $userId SET 
+        loginAttempts = 0, 
+        lockoutUntil = NONE,
+        lastLogin = time::now()
     `, { userId: user.id });
 
     const { accessToken, refreshToken } = generateTokens(user.id);
 
-    // Store refresh token
+    // Store refresh token securely
     await db.query(`
       UPDATE $userId SET refreshTokens = array::append(refreshTokens, $refreshToken)
     `, { userId: user.id, refreshToken });
 
+    // Log successful login
+    console.log(`Successful login for user: ${username}, IP: ${req.ip}`);
+
+    // Response with minimal user data
     res.json({
-      message: 'Login successful',
-      user: { id: user.id, email: user.email, role: user.role },
+      success: true,
+      message: 'Authentication successful',
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role
+      },
       accessToken,
-      refreshToken
+      refreshToken,
+      expiresIn: process.env.JWT_ACCESS_EXPIRES_IN
     });
+
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Authentication error:', error);
+    
+    // Ensure consistent response time
+    const elapsed = Date.now() - startTime;
+    const minResponseTime = 100; // Minimum 100ms response time
+    if (elapsed < minResponseTime) {
+      await new Promise(resolve => setTimeout(resolve, minResponseTime - elapsed));
+    }
+    
+    res.status(500).json({ error: 'Authentication service unavailable' });
   }
 });
 

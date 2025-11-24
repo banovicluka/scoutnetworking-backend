@@ -1,0 +1,202 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model users {
+  id         Int      @id @default(autoincrement())
+  username   String   @unique
+  email      String   @unique
+  password   String
+  role       String
+  created_at DateTime @default(now())
+  updated_at DateTime?
+
+  scout   scouts?
+  client  clients?
+}
+
+model scouts {
+  id         Int      @id @default(autoincrement())
+  user_id    Int      @unique
+  scout_role String
+  created_at DateTime @default(now())
+  updated_at DateTime?
+
+  user users @relation(fields: [user_id], references: [id])
+
+  scouting_reports scouting_reports[]
+}
+
+model clients {
+  id         Int      @id @default(autoincrement())
+  user_id    Int      @unique
+  name       String?
+  created_at DateTime @default(now())
+  updated_at DateTime?
+
+  user users @relation(fields: [user_id], references: [id])
+
+  client_report_visibility client_report_visibility[]
+  requests                 requests[]
+  client_notes             client_notes[]
+}
+
+model players {
+  id            Int      @id @default(autoincrement())
+  name          String?
+  height_cm     Int?
+  date_of_birth DateTime?
+  created_at    DateTime @default(now())
+  updated_at    DateTime?
+
+  scouting_reports scouting_reports[]
+}
+
+model scouting_reports {
+  id                    Int      @id @default(autoincrement())
+  player_id             Int
+  created_by_scout_id   Int
+
+  matches_watched       String?
+  club                  String?
+  opponents             String?
+  position              String?
+  foot                  String?
+
+  current_quality_rating Float?
+  final_rating          Float?
+  technique_rating      Float?
+  tactics_rating        Float?
+  strength_rating       Float?
+  speed_rating          Float?
+  mentality_rating      Float?
+  average_score         Float?
+
+  player_description    String?
+  conclusion            String?
+  additional_information String?
+  videos_link           String?
+
+  created_at            DateTime @default(now())
+  updated_at            DateTime?
+
+  player players @relation(fields: [player_id], references: [id])
+  scout  scouts  @relation(fields: [created_by_scout_id], references: [id])
+
+  strengths                     strengths[]
+  weaknesses                   weaknesses[]
+  client_report_visibility     client_report_visibility[]
+  scouting_report_translations scouting_report_translations[]
+}
+
+model strengths {
+  id         Int      @id @default(autoincrement())
+  report_id  Int
+  description String
+  report scouting_reports @relation(fields: [report_id], references: [id])
+
+  strengths_translations strengths_translations[]
+}
+
+model weaknesses {
+  id         Int      @id @default(autoincrement())
+  report_id  Int
+  description String
+  report scouting_reports @relation(fields: [report_id], references: [id])
+
+  weaknesses_translations weaknesses_translations[]
+}
+
+model client_report_visibility {
+  id        Int      @id @default(autoincrement())
+  client_id Int
+  report_id Int
+
+  client clients           @relation(fields: [client_id], references: [id])
+  report scouting_reports  @relation(fields: [report_id], references: [id])
+
+  @@unique([client_id, report_id])
+}
+
+model requests {
+  id                Int      @id @default(autoincrement())
+  client_id         Int
+  player_name       String
+  transfermarkt_link String?
+  additional_info   String?
+  status            String   @default("pending")
+
+  created_at        DateTime @default(now())
+  updated_at        DateTime?
+
+  client clients @relation(fields: [client_id], references: [id])
+}
+
+model client_notes {
+  id         Int      @id @default(autoincrement())
+  client_id  Int
+  title      String
+  content    String
+  created_at DateTime @default(now())
+  updated_at DateTime?
+
+  client clients @relation(fields: [client_id], references: [id])
+}
+
+model scouting_report_translations {
+  id                      Int      @id @default(autoincrement())
+  report_id               Int
+  language_code           String
+
+  matches_watched         String?
+  player_description      String?
+  conclusion              String?
+  additional_information  String?
+
+  created_at              DateTime @default(now())
+  updated_at              DateTime?
+
+  report scouting_reports @relation(fields: [report_id], references: [id])
+
+  @@unique([report_id, language_code])
+}
+
+model strengths_translations {
+  id            Int      @id @default(autoincrement())
+  strength_id   Int
+  language_code String
+  description   String
+
+  created_at    DateTime @default(now())
+  updated_at    DateTime?
+
+  strength strengths @relation(fields: [strength_id], references: [id])
+
+  @@unique([strength_id, language_code])
+}
+
+model weaknesses_translations {
+  id            Int      @id @default(autoincrement())
+  weakness_id   Int
+  language_code String
+  description   String
+
+  created_at    DateTime @default(now())
+  updated_at    DateTime?
+
+  weakness weaknesses @relation(fields: [weakness_id], references: [id])
+
+  @@unique([weakness_id, language_code])
+}
+
+
+
+sb_publishable_gYDCk4U4u2gqzutsEbaVbw_M3hdRTDF
+
+
+https://rtfrqkoxwvtslmjptoox.supabase.co
